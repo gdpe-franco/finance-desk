@@ -1,0 +1,40 @@
+package io.github.gdpe_franco.internaltransactions.web.controller;
+
+import io.github.gdpe_franco.internaltransactions.application.service.AccountService;
+import io.github.gdpe_franco.internaltransactions.domain.account.AccountCurrency;
+import io.github.gdpe_franco.internaltransactions.web.request.CreateAccountRequest;
+import io.github.gdpe_franco.internaltransactions.web.response.AccountResponse;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+@RestController
+@RequestMapping("/api/v1/accounts")
+public class AccountController {
+    private final AccountService accountService;
+
+    public AccountController(AccountService accountService) {
+        this.accountService = accountService;
+    }
+
+    @PostMapping
+    public ResponseEntity<AccountResponse> create(@Valid @RequestBody CreateAccountRequest request) {
+        var account = accountService.create(request.ownerName(), AccountCurrency.valueOf(request.currency()));
+        var location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(account.id())
+                .toUri();
+        return ResponseEntity.created(location).body(AccountResponse.from(account));
+    }
+
+    @GetMapping("/{id}")
+    public AccountResponse get(@PathVariable long id) {
+        return AccountResponse.from(accountService.get(id));
+    }
+}

@@ -1,6 +1,9 @@
 spring:
   application:
     name: internal-transactions-system
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
     username: ${DB_USERNAME:transactions_app}
