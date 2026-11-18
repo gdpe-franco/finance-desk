@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: internal-transactions-system
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USERNAME:transactions_app}
+    password: ${DB_PASSWORD:transactions_local}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

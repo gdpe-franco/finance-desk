@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: internal_transactions_system
+      MYSQL_USER: ${DB_USERNAME:-transactions_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-transactions_local}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localroot}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysql-data:
