@@ -14,7 +14,8 @@
 - Follow the established package boundaries: domain and application code must not depend on web or JPA implementation classes.
 - Use `BigDecimal` for money; never use floating-point monetary types or silently round amounts. Preserve transaction boundaries, idempotency, ledger immutability, and deterministic account lock ordering.
 - Keep Flyway migrations authoritative; Hibernate schema generation stays on `validate`. Never edit a migration that may have been applied; add a new migration.
-- Add focused unit or MySQL integration coverage for business rules and persistence behavior. Concurrency guarantees require concurrent integration tests against MySQL, not an in-memory substitute.
+- Test domain rules with plain JUnit unit tests (no Spring or database); test HTTP and persistence behavior with MySQL-backed integration tests; test transfer atomicity and concurrency with real MySQL transactions and concurrent operations.
+- Keep a clear happy-path test, and use JUnit 5 `@ParameterizedTest` with `@ValueSource`, `@CsvSource`, or `@MethodSource` for input variants that share the same behavior and expected outcome. Keep distinct outcomes or business rules in separate tests.
 - Preserve unrelated or hand-edited work. Do not commit, amend, push, or create PRs unless requested.
 - Run `./mvnw -B verify` and the documented Docker-based smoke check appropriate to the change. Report checks actually run and any environment blocker.
 - Keep responses and documentation in English. Do not commit secrets, local `.env` files, or generated build output.

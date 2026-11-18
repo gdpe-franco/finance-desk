@@ -1,10 +1,15 @@
 package io.github.gdpe_franco.internaltransactions.domain.account;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.math.BigDecimal;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,18 +26,21 @@ class AccountTests {
         assertTrue(account.accountNumber().startsWith("999999"));
     }
 
-    @Test
-    void rejectsInvalidAccountValues() {
+    @ParameterizedTest(name = "rejects invalid account: {0}")
+    @MethodSource("invalidAccounts")
+    void rejectsInvalidAccountValues(String scenario, String accountNumber, String ownerName, BigDecimal balance) {
+        assertThrows(IllegalArgumentException.class, () -> new Account(null, accountNumber, ownerName,
+                AccountCurrency.MXN, balance, AccountStatus.ACTIVE, 0, null, null));
+    }
+
+    private static Stream<Arguments> invalidAccounts() {
         var validClabe = ClabeAccountNumber.generate();
 
-        assertThrows(IllegalArgumentException.class, () -> new Account(null, validClabe, " ", AccountCurrency.MXN,
-                BigDecimal.ZERO, AccountStatus.ACTIVE, 0, null, null));
-        assertThrows(IllegalArgumentException.class, () -> new Account(null, validClabe, "Ada", AccountCurrency.MXN,
-                new BigDecimal("-0.01"), AccountStatus.ACTIVE, 0, null, null));
-        assertThrows(IllegalArgumentException.class, () -> new Account(null, validClabe, "Ada", AccountCurrency.MXN,
-                new BigDecimal("1.001"), AccountStatus.ACTIVE, 0, null, null));
-        assertThrows(IllegalArgumentException.class, () -> new Account(null, "000000000000000001", "Ada",
-                AccountCurrency.MXN, BigDecimal.ZERO, AccountStatus.ACTIVE, 0, null, null));
+        return Stream.of(
+                Arguments.of("blank owner", validClabe, " ", BigDecimal.ZERO),
+                Arguments.of("negative balance", validClabe, "Ada", new BigDecimal("-0.01")),
+                Arguments.of("excess balance precision", validClabe, "Ada", new BigDecimal("1.001")),
+                Arguments.of("invalid CLABE check digit", "000000000000000001", "Ada", BigDecimal.ZERO));
     }
 
     @Test
@@ -41,6 +49,6 @@ class AccountTests {
         char changedDigit = clabe.charAt(17) == '9' ? '0' : (char) (clabe.charAt(17) + 1);
 
         assertTrue(ClabeAccountNumber.isValid(clabe));
-        assertTrue(!ClabeAccountNumber.isValid(clabe.substring(0, 17) + changedDigit));
+        assertFalse(ClabeAccountNumber.isValid(clabe.substring(0, 17) + changedDigit));
     }
 }

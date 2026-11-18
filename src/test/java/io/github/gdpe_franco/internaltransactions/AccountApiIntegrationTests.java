@@ -1,14 +1,20 @@
 package io.github.gdpe_franco.internaltransactions;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.gdpe_franco.internaltransactions.domain.account.ClabeAccountNumber;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,31 +34,34 @@ class AccountApiIntegrationTests {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @BeforeEach
     void clearAccounts() {
         jdbcTemplate.update("DELETE FROM accounts");
     }
 
-    @Test
-    void createsAndRetrievesAccountWhileIgnoringCallerControlledAndUnknownFields() throws Exception {
+    @ParameterizedTest(name = "creates and retrieves an account in {0}")
+    @MethodSource("supportedCurrencies")
+    void createsAndRetrievesAccountWhileIgnoringCallerControlledAndUnknownFields(String currency) throws Exception {
         var created = mockMvc.perform(post("/api/v1/accounts")
                         .contentType("application/json")
                         .content("""
-                                {"ownerName":"  Ada Lovelace  ","currency":"MXN","accountNumber":"123",
+                                {"ownerName":"  Ada Lovelace  ","currency":"%s","accountNumber":"123",
                                  "balance":500.00,"status":"CLOSED","extra":"ignored"}
-                                """))
+                                """.formatted(currency)))
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.ownerName").value("Ada Lovelace"))
-                .andExpect(jsonPath("$.currency").value("MXN"))
+                .andExpect(jsonPath("$.currency").value(currency))
                 .andExpect(jsonPath("$.balance").value(0.00))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.version").value(0))
                 .andReturn();
 
         var body = created.getResponse().getContentAsString();
-        var accountId = com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
-                .readTree(body).get("id").asLong();
+        var accountId = objectMapper.readTree(body).get("id").asLong();
         var accountNumber = jdbcTemplate.queryForObject(
                 "SELECT account_number FROM accounts WHERE id = ?", String.class, accountId);
 
@@ -67,26 +76,28 @@ class AccountApiIntegrationTests {
                 .andExpect(jsonPath("$.updatedAt").isNotEmpty());
     }
 
-    @Test
-    void rejectsInvalidCreateRequestsWithoutPersistingAnAccount() throws Exception {
+    @ParameterizedTest(name = "rejects invalid account request: {0}")
+    @MethodSource("invalidCreateRequests")
+    void rejectsInvalidCreateRequestsWithoutPersistingAnAccount(String scenario, String request) throws Exception {
         mockMvc.perform(post("/api/v1/accounts")
                         .contentType("application/json")
-                        .content("{\"ownerName\":\"Ada\",\"currency\":\"CAD\"}"))
+                        .content(request))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
-
-        mockMvc.perform(post("/api/v1/accounts")
-                        .contentType("application/json")
-                        .content("{\"ownerName\":\"   \",\"currency\":\"MXN\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
-
-        mockMvc.perform(post("/api/v1/accounts")
-                        .contentType("application/json")
-                        .content("{\"ownerName\":\"%s\",\"currency\":\"MXN\"}".formatted("A".repeat(121))))
-                .andExpect(status().isBadRequest());
 
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class)).isZero();
+    }
+
+    private static Stream<String> supportedCurrencies() {
+        return Stream.of("MXN", "USD", "EUR");
+    }
+
+    private static Stream<Arguments> invalidCreateRequests() {
+        return Stream.of(
+                Arguments.of("unsupported currency", "{\"ownerName\":\"Ada\",\"currency\":\"CAD\"}"),
+                Arguments.of("blank owner", "{\"ownerName\":\"   \",\"currency\":\"MXN\"}"),
+                Arguments.of("overlong owner", "{\"ownerName\":\"%s\",\"currency\":\"MXN\"}"
+                        .formatted("A".repeat(121))));
     }
 
     @Test
@@ -97,20 +108,24 @@ class AccountApiIntegrationTests {
                 .andExpect(jsonPath("$.title").value("Account not found"));
     }
 
+    @ParameterizedTest(name = "MySQL rejects invalid account data: {0}")
+    @MethodSource("invalidDatabaseAccounts")
+    void mysqlConstraintsRejectInvalidAccountData(String scenario, String accountNumber, String currency,
+                                                   String balance, String status) {
+        assertThatThrownBy(() -> insertAccount(accountNumber, "Ada", currency, balance, status))
+                .isInstanceOf(DataAccessException.class);
+    }
+
+    private static Stream<Arguments> invalidDatabaseAccounts() {
+        return Stream.of(
+                Arguments.of("negative balance", ClabeAccountNumber.generate(), "MXN", "-0.01", "ACTIVE"),
+                Arguments.of("unsupported currency", ClabeAccountNumber.generate(), "CAD", "0.00", "ACTIVE"),
+                Arguments.of("invalid status", ClabeAccountNumber.generate(), "MXN", "0.00", "INVALID"),
+                Arguments.of("malformed account number", "not-a-clabe", "MXN", "0.00", "ACTIVE"));
+    }
+
     @Test
-    void mysqlConstraintsRejectInvalidBalancesCurrenciesStatusesAndDuplicateNumbers() {
-        var negativeBalanceNumber = ClabeAccountNumber.generate();
-        assertThatThrownBy(() -> insertAccount(negativeBalanceNumber, "Ada", "MXN", "-0.01", "ACTIVE"))
-                .isInstanceOf(DataAccessException.class);
-
-        var invalidCurrencyNumber = ClabeAccountNumber.generate();
-        assertThatThrownBy(() -> insertAccount(invalidCurrencyNumber, "Ada", "CAD", "0.00", "ACTIVE"))
-                .isInstanceOf(DataAccessException.class);
-
-        var invalidStatusNumber = ClabeAccountNumber.generate();
-        assertThatThrownBy(() -> insertAccount(invalidStatusNumber, "Ada", "MXN", "0.00", "INVALID"))
-                .isInstanceOf(DataAccessException.class);
-
+    void mysqlConstraintRejectsDuplicateAccountNumbers() {
         var duplicateNumber = ClabeAccountNumber.generate();
         insertAccount(duplicateNumber, "Ada", "MXN", "0.00", "ACTIVE");
         assertThatThrownBy(() -> insertAccount(duplicateNumber, "Grace", "MXN", "0.00", "ACTIVE"))
