@@ -14,11 +14,13 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -108,6 +110,72 @@ class AccountApiIntegrationTests {
                 .andExpect(jsonPath("$.title").value("Account not found"));
     }
 
+    @Test
+    void updatesOwnerNameAndIgnoresExtraAccountFields() throws Exception {
+        var accountId = createAccount("Original owner");
+        var original = objectMapper.readTree(mockMvc.perform(get("/api/v1/accounts/{id}", accountId))
+                .andReturn().getResponse().getContentAsString());
+
+        var updated = mockMvc.perform(patch("/api/v1/accounts/{id}", accountId)
+                        .contentType("application/json")
+                        .content("""
+                                {"ownerName":"  New owner  ","balance":999.00,"currency":"EUR","status":"CLOSED"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(accountId))
+                .andExpect(jsonPath("$.ownerName").value("New owner"))
+                .andExpect(jsonPath("$.accountNumber").value(original.get("accountNumber").asText()))
+                .andExpect(jsonPath("$.currency").value("MXN"))
+                .andExpect(jsonPath("$.balance").value(0.00))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.version").value(original.get("version").asLong() + 1))
+                .andReturn();
+
+        var updatedBody = objectMapper.readTree(updated.getResponse().getContentAsString());
+        assertThat(Instant.parse(updatedBody.get("createdAt").asText()))
+                .isEqualTo(Instant.parse(original.get("createdAt").asText()));
+        assertThat(Instant.parse(updatedBody.get("updatedAt").asText()))
+                .isAfter(Instant.parse(original.get("updatedAt").asText()));
+
+        mockMvc.perform(get("/api/v1/accounts/{id}", accountId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ownerName").value("New owner"));
+    }
+
+    @ParameterizedTest(name = "rejects invalid owner-name update: {0}")
+    @MethodSource("invalidOwnerNameUpdates")
+    void rejectsInvalidOwnerNameUpdatesWithoutChangingAccount(String scenario, String request) throws Exception {
+        var accountId = createAccount("Original owner");
+
+        mockMvc.perform(patch("/api/v1/accounts/{id}", accountId)
+                        .contentType("application/json")
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+
+        mockMvc.perform(get("/api/v1/accounts/{id}", accountId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ownerName").value("Original owner"))
+                .andExpect(jsonPath("$.version").value(0));
+    }
+
+    private static Stream<Arguments> invalidOwnerNameUpdates() {
+        return Stream.of(
+                Arguments.of("missing name", "{\"extra\":true}"),
+                Arguments.of("null name", "{\"ownerName\":null}"),
+                Arguments.of("blank name", "{\"ownerName\":\"   \"}"),
+                Arguments.of("overlong name", "{\"ownerName\":\"%s\"}".formatted("A".repeat(121))));
+    }
+
+    @Test
+    void returnsNotFoundWhenUpdatingMissingAccount() throws Exception {
+        mockMvc.perform(patch("/api/v1/accounts/999999")
+                        .contentType("application/json")
+                        .content("{\"ownerName\":\"New owner\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+    }
+
     @ParameterizedTest(name = "MySQL rejects invalid account data: {0}")
     @MethodSource("invalidDatabaseAccounts")
     void mysqlConstraintsRejectInvalidAccountData(String scenario, String accountNumber, String currency,
@@ -137,5 +205,14 @@ class AccountApiIntegrationTests {
                         INSERT INTO accounts (account_number, owner_name, currency, balance, status)
                         VALUES (?, ?, ?, ?, ?)
                         """, accountNumber, ownerName, currency, balance, status);
+    }
+
+    private long createAccount(String ownerName) throws Exception {
+        var created = mockMvc.perform(post("/api/v1/accounts")
+                        .contentType("application/json")
+                        .content("{\"ownerName\":\"%s\",\"currency\":\"MXN\"}".formatted(ownerName)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asLong();
     }
 }

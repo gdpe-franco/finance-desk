@@ -41,4 +41,8 @@ public record Account(
         return new Account(null, ClabeAccountNumber.generate(), ownerName, currency,
                 new BigDecimal("0.00"), AccountStatus.ACTIVE, 0, null, null);
     }
+
+    public Account withOwnerName(String ownerName) {
+        return new Account(id, accountNumber, ownerName, currency, balance, status, version, createdAt, updatedAt);
+    }
 }

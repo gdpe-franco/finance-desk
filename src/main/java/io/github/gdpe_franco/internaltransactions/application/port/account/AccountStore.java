@@ -8,4 +8,6 @@ public interface AccountStore {
     Account save(Account account);
 
     Optional<Account> findById(long id);
+
+    Optional<Account> update(long id, String ownerName);
 }

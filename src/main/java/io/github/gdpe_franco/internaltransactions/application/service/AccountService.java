@@ -23,4 +23,8 @@ public class AccountService {
     public Account get(long id) {
         return accountStore.findById(id).orElseThrow(() -> new AccountNotFoundException(id));
     }
+
+    public Account update(long id, String ownerName) {
+        return accountStore.update(id, ownerName).orElseThrow(() -> new AccountNotFoundException(id));
+    }
 }

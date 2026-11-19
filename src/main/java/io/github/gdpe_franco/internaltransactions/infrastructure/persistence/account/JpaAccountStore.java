@@ -23,4 +23,12 @@ class JpaAccountStore implements AccountStore {
     public Optional<Account> findById(long id) {
         return repository.findById(id).map(AccountEntity::toDomain);
     }
+
+    @Override
+    public Optional<Account> update(long id, String ownerName) {
+        return repository.findById(id).map(entity -> {
+            entity.updateOwnerName(entity.toDomain().withOwnerName(ownerName).ownerName());
+            return repository.saveAndFlush(entity).toDomain();
+        });
+    }
 }

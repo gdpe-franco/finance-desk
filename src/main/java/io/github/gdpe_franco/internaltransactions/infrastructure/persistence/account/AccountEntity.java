@@ -69,6 +69,10 @@ class AccountEntity {
         return new Account(id, accountNumber, ownerName, currency, balance, status, version, createdAt, updatedAt);
     }
 
+    void updateOwnerName(String ownerName) {
+        this.ownerName = ownerName;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = updatedAt = Instant.now();

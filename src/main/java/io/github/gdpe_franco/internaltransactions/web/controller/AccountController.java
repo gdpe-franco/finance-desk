@@ -3,10 +3,12 @@ package io.github.gdpe_franco.internaltransactions.web.controller;
 import io.github.gdpe_franco.internaltransactions.application.service.AccountService;
 import io.github.gdpe_franco.internaltransactions.domain.account.AccountCurrency;
 import io.github.gdpe_franco.internaltransactions.web.request.CreateAccountRequest;
+import io.github.gdpe_franco.internaltransactions.web.request.UpdateAccountRequest;
 import io.github.gdpe_franco.internaltransactions.web.response.AccountResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,5 +38,10 @@ public class AccountController {
     @GetMapping("/{id}")
     public AccountResponse get(@PathVariable long id) {
         return AccountResponse.from(accountService.get(id));
+    }
+
+    @PatchMapping("/{id}")
+    public AccountResponse update(@PathVariable long id, @Valid @RequestBody UpdateAccountRequest request) {
+        return AccountResponse.from(accountService.update(id, request.ownerName()));
     }
 }

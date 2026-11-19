@@ -33,6 +33,14 @@ class AccountTests {
                 AccountCurrency.MXN, balance, AccountStatus.ACTIVE, 0, null, null));
     }
 
+    @ParameterizedTest(name = "rejects invalid updated owner name: {0}")
+    @MethodSource("invalidOwnerNames")
+    void rejectsInvalidUpdatedOwnerNames(String scenario, String ownerName) {
+        var account = Account.open("Ada", AccountCurrency.MXN);
+
+        assertThrows(IllegalArgumentException.class, () -> account.withOwnerName(ownerName));
+    }
+
     private static Stream<Arguments> invalidAccounts() {
         var validClabe = ClabeAccountNumber.generate();
 
@@ -41,6 +49,13 @@ class AccountTests {
                 Arguments.of("negative balance", validClabe, "Ada", new BigDecimal("-0.01")),
                 Arguments.of("excess balance precision", validClabe, "Ada", new BigDecimal("1.001")),
                 Arguments.of("invalid CLABE check digit", "000000000000000001", "Ada", BigDecimal.ZERO));
+    }
+
+    private static Stream<Arguments> invalidOwnerNames() {
+        return Stream.of(
+                Arguments.of("null", null),
+                Arguments.of("blank", "   "),
+                Arguments.of("over 120 characters", "A".repeat(121)));
     }
 
     @Test
