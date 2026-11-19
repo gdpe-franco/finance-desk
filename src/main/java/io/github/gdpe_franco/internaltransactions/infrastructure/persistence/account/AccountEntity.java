@@ -73,6 +73,13 @@ class AccountEntity {
         this.ownerName = ownerName;
     }
 
+    void updateFrom(Account account) {
+        ownerName = account.ownerName();
+        currency = account.currency();
+        balance = account.balance();
+        status = account.status();
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = updatedAt = Instant.now();

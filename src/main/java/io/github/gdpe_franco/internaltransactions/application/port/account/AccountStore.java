@@ -2,6 +2,7 @@ package io.github.gdpe_franco.internaltransactions.application.port.account;
 
 import io.github.gdpe_franco.internaltransactions.domain.account.Account;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface AccountStore {
@@ -10,4 +11,6 @@ public interface AccountStore {
     Optional<Account> findById(long id);
 
     Optional<Account> update(long id, String ownerName);
+
+    List<Account> findByIdsForUpdate(List<Long> ids);
 }

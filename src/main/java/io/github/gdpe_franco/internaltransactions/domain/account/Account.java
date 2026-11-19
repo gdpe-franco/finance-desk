@@ -45,4 +45,27 @@ public record Account(
     public Account withOwnerName(String ownerName) {
         return new Account(id, accountNumber, ownerName, currency, balance, status, version, createdAt, updatedAt);
     }
+
+    public Account debit(BigDecimal amount) {
+        if (amount.signum() <= 0 || balance.compareTo(amount) < 0) {
+            throw new IllegalArgumentException("Debit amount must be positive and within available balance");
+        }
+        return withBalance(balance.subtract(amount));
+    }
+
+    public Account credit(BigDecimal amount) {
+        if (amount.signum() <= 0 || !canCredit(amount)) {
+            throw new IllegalArgumentException("Credit amount must be positive and fit account balance precision");
+        }
+        return withBalance(balance.add(amount));
+    }
+
+    public boolean canCredit(BigDecimal amount) {
+        var creditedBalance = balance.add(amount);
+        return creditedBalance.scale() <= 2 && creditedBalance.precision() <= 19;
+    }
+
+    private Account withBalance(BigDecimal balance) {
+        return new Account(id, accountNumber, ownerName, currency, balance, status, version, createdAt, updatedAt);
+    }
 }

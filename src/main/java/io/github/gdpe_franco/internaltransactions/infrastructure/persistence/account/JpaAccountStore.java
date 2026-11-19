@@ -4,6 +4,8 @@ import io.github.gdpe_franco.internaltransactions.application.port.account.Accou
 import io.github.gdpe_franco.internaltransactions.domain.account.Account;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -16,7 +18,12 @@ class JpaAccountStore implements AccountStore {
 
     @Override
     public Account save(Account account) {
-        return repository.save(AccountEntity.from(account)).toDomain();
+        if (account.id() == null) {
+            return repository.save(AccountEntity.from(account)).toDomain();
+        }
+        var entity = repository.findById(account.id()).orElseThrow();
+        entity.updateFrom(account);
+        return repository.saveAndFlush(entity).toDomain();
     }
 
     @Override
@@ -30,5 +37,14 @@ class JpaAccountStore implements AccountStore {
             entity.updateOwnerName(entity.toDomain().withOwnerName(ownerName).ownerName());
             return repository.saveAndFlush(entity).toDomain();
         });
+    }
+
+    @Override
+    public List<Account> findByIdsForUpdate(List<Long> ids) {
+        var accounts = new ArrayList<Account>();
+        for (var id : ids.stream().distinct().sorted().toList()) {
+            repository.findByIdForUpdate(id).map(AccountEntity::toDomain).ifPresent(accounts::add);
+        }
+        return accounts;
     }
 }

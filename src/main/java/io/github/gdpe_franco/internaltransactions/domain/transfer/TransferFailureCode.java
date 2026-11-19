@@ -1,0 +1,13 @@
+package io.github.gdpe_franco.internaltransactions.domain.transfer;
+
+public enum TransferFailureCode {
+    SAME_ACCOUNT,
+    AMOUNT_NOT_POSITIVE,
+    SOURCE_ACCOUNT_NOT_FOUND,
+    DESTINATION_ACCOUNT_NOT_FOUND,
+    SOURCE_ACCOUNT_INACTIVE,
+    DESTINATION_ACCOUNT_INACTIVE,
+    CURRENCY_MISMATCH,
+    INSUFFICIENT_FUNDS,
+    DESTINATION_BALANCE_OVERFLOW
+}

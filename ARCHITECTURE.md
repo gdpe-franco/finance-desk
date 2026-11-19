@@ -30,7 +30,7 @@ Keep this as one deployable application. Add abstractions only where they separa
 ## Transfer, idempotency, and failure contract
 
 - Reject malformed requests at the HTTP boundary; they do not create transfer records.
-- Require a UUID `Idempotency-Key`. A key is unique in the database and bound to normalized source, destination, amount, and currency input. Reusing it for different input returns `409 Conflict`.
+- Require a UUID `Idempotency-Key`. A key is unique in the database and bound to normalized source, destination, amount, and currency input. Repeating the same request returns its stored outcome; reusing the key for different input returns `409 Conflict`.
 - A repeated key returns the stored terminal result. Repeating a failed business request returns the same failure; callers need a new key for a corrected request.
 - Persist business failures so attempts remain queryable. A failure code is stored on the transfer for stable replay. Unexpected failures are not misreported as business failures.
 - Register a transfer as PENDING in a short transaction. Process it in a separate transaction that locks the transfer row, then both account rows ordered by ascending account ID. Validate all rules before changing balances. Success updates both balances, inserts exactly one DEBIT and one CREDIT ledger entry, and marks the transfer COMPLETED in that same transaction. A business-rule failure marks the transfer FAILED without changing balances or ledger.
@@ -42,6 +42,7 @@ Keep this as one deployable application. Add abstractions only where they separa
 
 - Successful account creation returns `201 Created`; missing resources return `404`.
 - Validation errors use Spring `ProblemDetail` responses. Business rule failures use stable error codes; idempotency payload conflicts return `409`.
+- Malformed transfer requests return `400` and create no attempt. Well-formed requests rejected by transfer business rules return `422` with the persisted transfer ID and failure code.
 - Ignore unknown JSON request properties. Request DTOs must not bind caller-provided account numbers, balances, or statuses into domain/persistence models.
 - Ledger reads are paginated with a deterministic order.
 

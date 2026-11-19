@@ -41,6 +41,8 @@ class AccountApiIntegrationTests {
 
     @BeforeEach
     void clearAccounts() {
+        jdbcTemplate.update("DELETE FROM ledger_entries");
+        jdbcTemplate.update("DELETE FROM transfers");
         jdbcTemplate.update("DELETE FROM accounts");
     }
 
@@ -208,11 +210,17 @@ class AccountApiIntegrationTests {
     }
 
     private long createAccount(String ownerName) throws Exception {
+        return createAccount(ownerName, "MXN");
+    }
+
+    private long createAccount(String ownerName, String currency) throws Exception {
         var created = mockMvc.perform(post("/api/v1/accounts")
                         .contentType("application/json")
-                        .content("{\"ownerName\":\"%s\",\"currency\":\"MXN\"}".formatted(ownerName)))
+                        .content("{\"ownerName\":\"%s\",\"currency\":\"%s\"}"
+                                .formatted(ownerName, currency)))
                 .andExpect(status().isCreated())
                 .andReturn();
         return objectMapper.readTree(created.getResponse().getContentAsString()).get("id").asLong();
     }
+
 }
