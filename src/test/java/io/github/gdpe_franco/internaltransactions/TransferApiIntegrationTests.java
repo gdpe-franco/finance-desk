@@ -1,8 +1,8 @@
 package io.github.gdpe_franco.internaltransactions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.github.gdpe_franco.internaltransactions.application.service.TransferApplicationService;
 import io.github.gdpe_franco.internaltransactions.application.service.TransferRegistrationService;
+import io.github.gdpe_franco.internaltransactions.application.port.ledger.LedgerStore;
 import io.github.gdpe_franco.internaltransactions.domain.account.AccountCurrency;
 import io.github.gdpe_franco.internaltransactions.domain.account.ClabeAccountNumber;
 import io.github.gdpe_franco.internaltransactions.domain.transfer.TransferRequest;
@@ -14,11 +14,12 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -28,7 +29,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -48,11 +53,11 @@ class TransferApiIntegrationTests {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired
-    private TransferApplicationService transferService;
-
-    @Autowired
+    @MockitoSpyBean
     private TransferRegistrationService transferRegistrationService;
+
+    @MockitoSpyBean
+    private LedgerStore ledgerStore;
 
     @BeforeEach
     void clearTransferData() {
@@ -197,6 +202,95 @@ class TransferApiIntegrationTests {
     }
 
     @Test
+    void resumesPendingAttemptAfterRegistrationInterruption() throws Exception {
+        var sourceId = createFundedAccount("Source", "MXN", "100.00");
+        var destinationId = createFundedAccount("Destination", "MXN", "0.00");
+        var key = UUID.randomUUID();
+        var pending = transferRegistrationService.register(new TransferRequest(key, sourceId, destinationId,
+                new BigDecimal("25.00"), AccountCurrency.MXN));
+
+        submit(key, sourceId, destinationId, "25.00", "MXN")
+                .andExpect(status().isOk())
+                .andExpect(header().string("Idempotent-Replayed", "true"))
+                .andExpect(jsonPath("$.id").value(pending.id()))
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertThat(accountBalance(sourceId)).isEqualByComparingTo("75.00");
+        assertThat(accountBalance(destinationId)).isEqualByComparingTo("25.00");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfers", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void retryRevalidatesCurrentBalanceAndKeepsTheStoredBusinessFailure() throws Exception {
+        var sourceId = createFundedAccount("Source", "MXN", "100.00");
+        var destinationId = createFundedAccount("Destination", "MXN", "0.00");
+        var key = UUID.randomUUID();
+        var pending = transferRegistrationService.register(new TransferRequest(key, sourceId, destinationId,
+                new BigDecimal("25.00"), AccountCurrency.MXN));
+        jdbcTemplate.update("UPDATE accounts SET balance = 10.00 WHERE id = ?", sourceId);
+
+        var failed = submit(key, sourceId, destinationId, "25.00", "MXN")
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.failureCode").value("INSUFFICIENT_FUNDS"))
+                .andReturn();
+        assertThat(objectMapper.readTree(failed.getResponse().getContentAsString())
+                .get("transferId").asLong()).isEqualTo(pending.id());
+
+        jdbcTemplate.update("UPDATE accounts SET balance = 100.00 WHERE id = ?", sourceId);
+        submit(key, sourceId, destinationId, "25.00", "MXN")
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.transferId").value(pending.id()))
+                .andExpect(jsonPath("$.failureCode").value("INSUFFICIENT_FUNDS"));
+        assertThat(accountBalance(sourceId)).isEqualByComparingTo("100.00");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isZero();
+    }
+
+    @Test
+    void pendingAttemptRejectsReusedKeyWithDifferentDetails() throws Exception {
+        var sourceId = createFundedAccount("Source", "MXN", "100.00");
+        var destinationId = createFundedAccount("Destination", "MXN", "0.00");
+        var key = UUID.randomUUID();
+        var pending = transferRegistrationService.register(new TransferRequest(key, sourceId, destinationId,
+                new BigDecimal("25.00"), AccountCurrency.MXN));
+
+        submit(key, sourceId, destinationId, "30.00", "MXN")
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM transfers WHERE id = ?", String.class, pending.id())).isEqualTo("PENDING");
+        assertThat(accountBalance(sourceId)).isEqualByComparingTo("100.00");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isZero();
+    }
+
+    @Test
+    void concurrentRetriesOfPendingAttemptProduceOneTransfer() throws Exception {
+        var sourceId = createFundedAccount("Source", "MXN", "100.00");
+        var destinationId = createFundedAccount("Destination", "MXN", "0.00");
+        var key = UUID.randomUUID();
+        var pending = transferRegistrationService.register(new TransferRequest(key, sourceId, destinationId,
+                new BigDecimal("25.00"), AccountCurrency.MXN));
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> submitWhenStarted(ready, start, key, sourceId, destinationId));
+            var second = executor.submit(() -> submitWhenStarted(ready, start, key, sourceId, destinationId));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            var firstResponse = first.get(10, TimeUnit.SECONDS);
+            var secondResponse = second.get(10, TimeUnit.SECONDS);
+            assertThat(firstResponse.getResponse().getStatus()).isEqualTo(200);
+            assertThat(secondResponse.getResponse().getStatus()).isEqualTo(200);
+            assertThat(responseTransferId(firstResponse)).isEqualTo(pending.id());
+            assertThat(responseTransferId(secondResponse)).isEqualTo(pending.id());
+        }
+        assertThat(accountBalance(sourceId)).isEqualByComparingTo("75.00");
+        assertThat(accountBalance(destinationId)).isEqualByComparingTo("25.00");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfers", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
     void concurrentDuplicateSubmissionsCreateOnlyOneTransfer() throws Exception {
         var sourceId = createFundedAccount("Source", "MXN", "100.00");
         var destinationId = createFundedAccount("Destination", "MXN", "0.00");
@@ -242,24 +336,54 @@ class TransferApiIntegrationTests {
     }
 
     @Test
-    void rollsBackBalancesAndLedgerIfSecondLedgerInsertViolatesUniqueConstraint() throws Exception {
+    void keepsAttemptPendingAfterProcessingErrorAndCompletesItOnRetry() throws Exception {
         var sourceId = createFundedAccount("Source", "MXN", "100.00");
         var destinationId = createFundedAccount("Destination", "MXN", "0.00");
-        var request = new TransferRequest(UUID.randomUUID(), sourceId, destinationId,
-                new BigDecimal("10.00"), AccountCurrency.MXN);
-        var pending = transferRegistrationService.register(request);
-        jdbcTemplate.update("""
-                        INSERT INTO ledger_entries (transfer_id, account_id, type, amount)
-                        VALUES (?, ?, 'CREDIT', 10.00)
-                        """, pending.id(), destinationId);
+        var key = UUID.randomUUID();
+        var pending = transferRegistrationService.register(new TransferRequest(key, sourceId, destinationId,
+                new BigDecimal("10.00"), AccountCurrency.MXN));
+        doAnswer(invocation -> {
+            invocation.callRealMethod();
+            throw new org.springframework.dao.DataAccessResourceFailureException("Injected ledger write failure");
+        }).when(ledgerStore).saveAll(anyList());
 
-        assertThatThrownBy(() -> transferService.submit(request)).isInstanceOf(DataAccessException.class);
+        var failed = submit(key, sourceId, destinationId, "10.00", "MXN")
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("TRANSFER_PROCESSING_ERROR"))
+                .andExpect(jsonPath("$.transferId").value(pending.id()))
+                .andReturn();
+        assertThat(objectMapper.readTree(failed.getResponse().getContentAsString())
+                .get("detail").asText()).contains("same Idempotency-Key");
 
         assertThat(accountBalance(sourceId)).isEqualByComparingTo("100.00");
         assertThat(accountBalance(destinationId)).isEqualByComparingTo("0.00");
-        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isEqualTo(1);
-        assertThat(jdbcTemplate.queryForObject("SELECT type FROM ledger_entries", String.class)).isEqualTo("CREDIT");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isZero();
         assertThat(jdbcTemplate.queryForObject("SELECT status FROM transfers", String.class)).isEqualTo("PENDING");
+
+        reset(ledgerStore);
+        submit(key, sourceId, destinationId, "10.00", "MXN")
+                .andExpect(status().isOk())
+                .andExpect(header().string("Idempotent-Replayed", "true"))
+                .andExpect(jsonPath("$.id").value(pending.id()))
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertThat(accountBalance(sourceId)).isEqualByComparingTo("90.00");
+        assertThat(accountBalance(destinationId)).isEqualByComparingTo("10.00");
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ledger_entries", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void registrationErrorDoesNotReturnAFabricatedTransferId() throws Exception {
+        doThrow(new DataAccessResourceFailureException("injected registration failure"))
+                .when(transferRegistrationService).register(any(TransferRequest.class));
+
+        mockMvc.perform(post("/api/v1/transfers")
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content("{\"sourceAccountId\":1,\"destinationAccountId\":2,\"amount\":1.00,\"currency\":\"MXN\"}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("TRANSFER_REGISTRATION_ERROR"))
+                .andExpect(jsonPath("$.transferId").doesNotExist());
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfers", Integer.class)).isZero();
     }
 
     @Test

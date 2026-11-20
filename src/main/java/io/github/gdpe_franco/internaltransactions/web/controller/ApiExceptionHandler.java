@@ -4,6 +4,10 @@ import io.github.gdpe_franco.internaltransactions.application.service.AccountNot
 import io.github.gdpe_franco.internaltransactions.application.service.IdempotencyConflictException;
 import io.github.gdpe_franco.internaltransactions.application.service.InvalidLedgerPageException;
 import io.github.gdpe_franco.internaltransactions.application.service.TransferNotFoundException;
+import io.github.gdpe_franco.internaltransactions.application.service.TransferProcessingException;
+import io.github.gdpe_franco.internaltransactions.application.service.TransferRegistrationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +17,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(AccountNotFoundException.class)
     ResponseEntity<ProblemDetail> accountNotFound(AccountNotFoundException exception) {
@@ -40,5 +45,26 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, exception.getMessage());
         problem.setTitle("Invalid ledger page");
         return ResponseEntity.badRequest().body(problem);
+    }
+
+    @ExceptionHandler(TransferRegistrationException.class)
+    ResponseEntity<ProblemDetail> transferRegistrationFailure(TransferRegistrationException exception) {
+        log.error("Transfer registration failed", exception.getCause());
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Transfer could not be registered. Retry with the same Idempotency-Key.");
+        problem.setTitle("Transfer registration error");
+        problem.setProperty("code", "TRANSFER_REGISTRATION_ERROR");
+        return ResponseEntity.internalServerError().body(problem);
+    }
+
+    @ExceptionHandler(TransferProcessingException.class)
+    ResponseEntity<ProblemDetail> transferProcessingFailure(TransferProcessingException exception) {
+        log.error("Transfer {} processing failed", exception.transferId(), exception.getCause());
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Transfer outcome is unknown. Retry the same request with the same Idempotency-Key.");
+        problem.setTitle("Transfer processing error");
+        problem.setProperty("code", "TRANSFER_PROCESSING_ERROR");
+        problem.setProperty("transferId", exception.transferId());
+        return ResponseEntity.internalServerError().body(problem);
     }
 }

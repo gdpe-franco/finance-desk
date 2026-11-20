@@ -21,6 +21,8 @@ SPRING_PROFILES_ACTIVE=local-demo ./mvnw spring-boot:run
 
 The fixture seeds two MXN accounts only when the database has no accounts and logs their IDs. Their opening balances are demo-only and are not recorded in the transfer ledger.
 
+For an uncertain transfer response or a `500` processing error, retry the same request with the same `Idempotency-Key`. A stored `422` business rejection is replayed; use a new key if the request details change.
+
 Local database credentials have development-only defaults in `compose.yaml`. To override them, copy `.env.example` to `.env`. To stop MySQL while preserving its data, run `docker compose down`; to delete the local database volume as well, run `docker compose down -v`.
 
 Run the test suite with:

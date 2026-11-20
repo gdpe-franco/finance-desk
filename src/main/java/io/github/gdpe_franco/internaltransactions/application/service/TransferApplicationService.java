@@ -31,13 +31,24 @@ public class TransferApplicationService {
             registered = registrationService.register(request);
             replayed = false;
         } catch (DataIntegrityViolationException exception) {
-            registered = transferStore.findByIdempotencyKey(request.idempotencyKey()).orElseThrow(() -> exception);
+            try {
+                registered = transferStore.findByIdempotencyKey(request.idempotencyKey())
+                        .orElseThrow(() -> exception);
+            } catch (RuntimeException lookupFailure) {
+                throw new TransferRegistrationException(lookupFailure);
+            }
             if (!request.sameDetails(registered)) {
                 throw new IdempotencyConflictException();
             }
             replayed = true;
+        } catch (RuntimeException exception) {
+            throw new TransferRegistrationException(exception);
         }
-        return new Submission(processingService.process(registered.id()), replayed);
+        try {
+            return new Submission(processingService.process(registered.id()), replayed);
+        } catch (RuntimeException exception) {
+            throw new TransferProcessingException(registered.id(), exception);
+        }
     }
 
     @Transactional(readOnly = true)
