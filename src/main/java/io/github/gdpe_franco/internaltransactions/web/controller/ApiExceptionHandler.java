@@ -6,8 +6,12 @@ import io.github.gdpe_franco.internaltransactions.application.service.InvalidLed
 import io.github.gdpe_franco.internaltransactions.application.service.TransferNotFoundException;
 import io.github.gdpe_franco.internaltransactions.application.service.TransferProcessingException;
 import io.github.gdpe_franco.internaltransactions.application.service.TransferRegistrationException;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -60,11 +64,27 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(TransferProcessingException.class)
     ResponseEntity<ProblemDetail> transferProcessingFailure(TransferProcessingException exception) {
         log.error("Transfer {} processing failed", exception.transferId(), exception.getCause());
-        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+        var retryable = hasRetryableLockFailure(exception.getCause());
+        var status = retryable ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.INTERNAL_SERVER_ERROR;
+        var code = retryable ? "RETRYABLE_CONCURRENCY_FAILURE" : "TRANSFER_PROCESSING_ERROR";
+        var problem = ProblemDetail.forStatusAndDetail(status,
                 "Transfer outcome is unknown. Retry the same request with the same Idempotency-Key.");
         problem.setTitle("Transfer processing error");
-        problem.setProperty("code", "TRANSFER_PROCESSING_ERROR");
+        problem.setProperty("code", code);
         problem.setProperty("transferId", exception.transferId());
-        return ResponseEntity.internalServerError().body(problem);
+        return ResponseEntity.status(status).body(problem);
+    }
+
+    private boolean hasRetryableLockFailure(Throwable cause) {
+        for (var current = cause; current != null; current = current.getCause()) {
+            if (current instanceof PessimisticLockingFailureException
+                    || current instanceof PessimisticLockException
+                    || current instanceof LockTimeoutException
+                    || current instanceof QueryTimeoutException
+                    || current instanceof java.sql.SQLTransactionRollbackException) {
+                return true;
+            }
+        }
+        return false;
     }
 }
