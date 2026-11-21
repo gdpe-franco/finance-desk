@@ -41,11 +41,12 @@ Keep this as one deployable application. Add abstractions only where they separa
 ## API behavior
 
 - Successful account creation returns `201 Created`; missing resources return `404`.
-- Validation errors use Spring `ProblemDetail` responses. Business rule failures use stable error codes; idempotency payload conflicts return `409`.
+- Request-body validation errors use Spring `ProblemDetail` responses with an `errors` object mapping invalid field names to messages. Business rule failures use stable error codes; idempotency payload conflicts return `409`.
 - Malformed transfer requests return `400` and create no attempt. Well-formed requests rejected by transfer business rules return `422` with the persisted transfer ID and failure code.
 - MySQL deadlocks and row-lock timeouts return `503` with `RETRYABLE_CONCURRENCY_FAILURE`; the attempt remains PENDING and a retry uses the same idempotency key.
 - Ignore unknown JSON request properties. Request DTOs must not bind caller-provided account numbers, balances, or statuses into domain/persistence models.
-- Ledger reads are paginated with a deterministic order.
+- The MVP has no authentication. Compose publishes the API and MySQL ports on localhost only; `Idempotency-Key` identifies a retry, not a caller.
+- Ledger reads use zero-based `page` and `size` query parameters, return an `entries` array and `page` metadata (`number`, `size`, `totalElements`, `totalPages`), and have deterministic ordering.
 
 ## Decisions deferred
 

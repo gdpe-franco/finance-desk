@@ -25,6 +25,6 @@ class JpaLedgerStore implements LedgerStore {
     public LedgerPage findByAccountId(long accountId, int page, int size) {
         var result = repository.findByAccountIdOrderByCreatedAtDescIdDesc(accountId, PageRequest.of(page, size));
         return new LedgerPage(result.getContent().stream().map(LedgerEntryEntity::toDomain).toList(), page, size,
-                result.hasNext());
+                result.getTotalElements(), result.getTotalPages());
     }
 }

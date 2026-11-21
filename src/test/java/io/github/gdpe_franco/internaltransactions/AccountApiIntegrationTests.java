@@ -82,12 +82,14 @@ class AccountApiIntegrationTests {
 
     @ParameterizedTest(name = "rejects invalid account request: {0}")
     @MethodSource("invalidCreateRequests")
-    void rejectsInvalidCreateRequestsWithoutPersistingAnAccount(String scenario, String request) throws Exception {
+    void rejectsInvalidCreateRequestsWithoutPersistingAnAccount(String scenario, String field, String request)
+            throws Exception {
         mockMvc.perform(post("/api/v1/accounts")
                         .contentType("application/json")
                         .content(request))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.errors." + field).isNotEmpty());
 
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM accounts", Integer.class)).isZero();
     }
@@ -98,9 +100,9 @@ class AccountApiIntegrationTests {
 
     private static Stream<Arguments> invalidCreateRequests() {
         return Stream.of(
-                Arguments.of("unsupported currency", "{\"ownerName\":\"Ada\",\"currency\":\"CAD\"}"),
-                Arguments.of("blank owner", "{\"ownerName\":\"   \",\"currency\":\"MXN\"}"),
-                Arguments.of("overlong owner", "{\"ownerName\":\"%s\",\"currency\":\"MXN\"}"
+                Arguments.of("unsupported currency", "currency", "{\"ownerName\":\"Ada\",\"currency\":\"CAD\"}"),
+                Arguments.of("blank owner", "ownerName", "{\"ownerName\":\"   \",\"currency\":\"MXN\"}"),
+                Arguments.of("overlong owner", "ownerName", "{\"ownerName\":\"%s\",\"currency\":\"MXN\"}"
                         .formatted("A".repeat(121))));
     }
 
@@ -153,7 +155,8 @@ class AccountApiIntegrationTests {
                         .contentType("application/json")
                         .content(request))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.errors.ownerName").isNotEmpty());
 
         mockMvc.perform(get("/api/v1/accounts/{id}", accountId))
                 .andExpect(status().isOk())

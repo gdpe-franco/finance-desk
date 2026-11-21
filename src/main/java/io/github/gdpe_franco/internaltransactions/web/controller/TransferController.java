@@ -46,7 +46,7 @@ public class TransferController {
                     content = @Content(schema = @Schema(implementation = TransferResponse.class))),
             @ApiResponse(responseCode = "200", description = "Stored transfer result replayed",
                     content = @Content(schema = @Schema(implementation = TransferResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Malformed request or missing/invalid idempotency key",
+            @ApiResponse(responseCode = "400", description = "Malformed request, invalid fields (errors map), or missing/invalid idempotency key",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "409", description = "Idempotency key reused with different transfer details",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),

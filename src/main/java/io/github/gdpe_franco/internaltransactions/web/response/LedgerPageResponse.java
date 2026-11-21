@@ -8,7 +8,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
-public record LedgerPageResponse(List<LedgerEntryResponse> entries, int page, int size, boolean hasNext) {
+public record LedgerPageResponse(List<LedgerEntryResponse> entries, PageMetadata page) {
+
+    public record PageMetadata(int number, int size, long totalElements, int totalPages) {
+    }
 
     public record LedgerEntryResponse(
             long id,
@@ -26,6 +29,6 @@ public record LedgerPageResponse(List<LedgerEntryResponse> entries, int page, in
 
     public static LedgerPageResponse from(LedgerPage page) {
         return new LedgerPageResponse(page.entries().stream().map(LedgerEntryResponse::from).toList(),
-                page.page(), page.size(), page.hasNext());
+                new PageMetadata(page.page(), page.size(), page.totalElements(), page.totalPages()));
     }
 }

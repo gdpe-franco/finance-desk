@@ -44,7 +44,8 @@ public class AccountController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Account created",
                     content = @Content(schema = @Schema(implementation = AccountResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid request", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+            @ApiResponse(responseCode = "400", description = "Invalid request; errors maps field names to messages",
+                    content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     })
     public ResponseEntity<AccountResponse> create(@Valid @RequestBody CreateAccountRequest request) {
         var account = accountService.create(request.ownerName(), AccountCurrency.valueOf(request.currency()));
@@ -72,7 +73,7 @@ public class AccountController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Account updated",
                     content = @Content(schema = @Schema(implementation = AccountResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid owner name",
+            @ApiResponse(responseCode = "400", description = "Invalid owner name; errors.ownerName contains the field message",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class))),
             @ApiResponse(responseCode = "404", description = "Account not found",
                     content = @Content(schema = @Schema(implementation = ProblemDetail.class)))

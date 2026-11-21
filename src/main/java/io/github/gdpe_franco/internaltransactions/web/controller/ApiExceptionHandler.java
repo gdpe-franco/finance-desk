@@ -12,16 +12,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.util.LinkedHashMap;
 
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException exception,
+                                                                  HttpHeaders headers,
+                                                                  HttpStatusCode status,
+                                                                  WebRequest request) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "One or more fields are invalid.");
+        problem.setTitle("Validation failed");
+        var errors = new LinkedHashMap<String, String>();
+        exception.getBindingResult().getFieldErrors().forEach(error ->
+                errors.putIfAbsent(error.getField(), error.getDefaultMessage()));
+        problem.setProperty("errors", errors);
+        return handleExceptionInternal(exception, problem, headers, HttpStatus.BAD_REQUEST, request);
+    }
 
     @ExceptionHandler(AccountNotFoundException.class)
     ResponseEntity<ProblemDetail> accountNotFound(AccountNotFoundException exception) {

@@ -90,7 +90,10 @@ class TransferApiIntegrationTests {
                 .andExpect(jsonPath("$.entries.length()").value(1))
                 .andExpect(jsonPath("$.entries[0].type").value("DEBIT"))
                 .andExpect(jsonPath("$.entries[0].amount").value(250.00))
-                .andExpect(jsonPath("$.hasNext").value(false));
+                .andExpect(jsonPath("$.page.number").value(0))
+                .andExpect(jsonPath("$.page.size").value(1))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.page.totalPages").value(1));
         mockMvc.perform(get("/api/v1/accounts/{id}/ledger", destinationId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.entries[0].type").value("CREDIT"));
@@ -104,8 +107,15 @@ class TransferApiIntegrationTests {
         submit(UUID.randomUUID(), sourceId, destinationId, "10.00", "MXN").andExpect(status().isCreated());
         jdbcTemplate.update("UPDATE ledger_entries SET created_at = '2026-01-01 00:00:00.000000'");
 
-        var firstPage = ledgerPage(sourceId, 0).andExpect(jsonPath("$.hasNext").value(true)).andReturn();
-        var secondPage = ledgerPage(sourceId, 1).andExpect(jsonPath("$.hasNext").value(false)).andReturn();
+        var firstPage = ledgerPage(sourceId, 0)
+                .andExpect(jsonPath("$.page.number").value(0))
+                .andExpect(jsonPath("$.page.totalElements").value(2))
+                .andExpect(jsonPath("$.page.totalPages").value(2))
+                .andReturn();
+        var secondPage = ledgerPage(sourceId, 1)
+                .andExpect(jsonPath("$.page.number").value(1))
+                .andExpect(jsonPath("$.page.totalPages").value(2))
+                .andReturn();
         var firstEntryId = entryId(firstPage);
         var secondEntryId = entryId(secondPage);
 
@@ -327,6 +337,25 @@ class TransferApiIntegrationTests {
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfers", Integer.class)).isZero();
     }
 
+    @ParameterizedTest(name = "reports validation error on transfer field {0}")
+    @MethodSource("invalidTransferFields")
+    void reportsFieldSpecificErrorsForInvalidTransferRequests(String field, String request) throws Exception {
+        mockMvc.perform(post("/api/v1/transfers")
+                        .header("Idempotency-Key", UUID.randomUUID())
+                        .contentType("application/json")
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors." + field).isNotEmpty());
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM transfers", Integer.class)).isZero();
+    }
+
+    private static Stream<Arguments> invalidTransferFields() {
+        return Stream.of(
+                Arguments.of("currency", "{\"sourceAccountId\":1,\"destinationAccountId\":2,\"amount\":1,\"currency\":\"MXN!\"}"),
+                Arguments.of("amount", "{\"sourceAccountId\":1,\"destinationAccountId\":2,\"amount\":1.001,\"currency\":\"MXN\"}"),
+                Arguments.of("sourceAccountId", "{\"sourceAccountId\":0,\"destinationAccountId\":2,\"amount\":1,\"currency\":\"MXN\"}"));
+    }
+
     @Test
     void returnsNotFoundForUnknownTransfer() throws Exception {
         mockMvc.perform(get("/api/v1/transfers/999999"))
@@ -389,7 +418,10 @@ class TransferApiIntegrationTests {
     @Test
     void returnsEmptyLedgerAndRejectsAnOversizedPage() throws Exception {
         var accountId = createAccount("Empty ledger");
-        ledgerPage(accountId, 0).andExpect(jsonPath("$.entries.length()").value(0));
+        ledgerPage(accountId, 0)
+                .andExpect(jsonPath("$.entries.length()").value(0))
+                .andExpect(jsonPath("$.page.totalElements").value(0))
+                .andExpect(jsonPath("$.page.totalPages").value(0));
         mockMvc.perform(get("/api/v1/accounts/{id}/ledger", accountId).param("size", "101"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"));

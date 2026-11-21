@@ -11,6 +11,7 @@ docker compose up -d --build --wait
 ```
 
 API: <http://localhost:8080>
+This MVP has no authentication. Compose binds the API and MySQL ports to localhost only; the `Idempotency-Key` header is not an access credential.
 - Health: <http://localhost:8080/actuator/health>
 - Swagger UI: <http://localhost:8080/swagger-ui/index.html>
 - OpenAPI JSON: <http://localhost:8080/v3/api-docs>
@@ -66,6 +67,8 @@ Read the transfer and an account's ledger:
 curl -i http://localhost:8080/api/v1/transfers/1
 curl -i 'http://localhost:8080/api/v1/accounts/1/ledger?page=0&size=50'
 ```
+
+Ledger responses contain an `entries` array and `page` metadata: the zero-based `number`, `size`, `totalElements`, and `totalPages`.
 
 ## Architecture at a glance
 

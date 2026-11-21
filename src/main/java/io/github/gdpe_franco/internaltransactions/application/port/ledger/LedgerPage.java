@@ -4,5 +4,5 @@ import io.github.gdpe_franco.internaltransactions.domain.ledger.LedgerEntry;
 
 import java.util.List;
 
-public record LedgerPage(List<LedgerEntry> entries, int page, int size, boolean hasNext) {
+public record LedgerPage(List<LedgerEntry> entries, int page, int size, long totalElements, int totalPages) {
 }

@@ -35,6 +35,19 @@ class ApiDocumentationIntegrationTests {
         assertThat(paths.has("/api/v1/accounts")).isTrue();
         assertThat(paths.has("/api/v1/accounts/{id}/ledger")).isTrue();
         assertThat(paths.has("/api/v1/transfers")).isTrue();
+        var ledgerResponse = paths.path("/api/v1/accounts/{id}/ledger").path("get")
+                .path("responses").path("200").path("content").path("*/*").path("schema");
+        assertThat(ledgerResponse.path("$ref").asText()).endsWith("/LedgerPageResponse");
+        var schemas = openApi.path("components").path("schemas");
+        assertThat(schemas.path("LedgerPageResponse").path("properties").path("page").path("$ref").asText())
+                .endsWith("/PageMetadata");
+        var pageMetadata = schemas.path("PageMetadata").path("properties");
+        assertThat(pageMetadata.has("number")).isTrue();
+        assertThat(pageMetadata.has("size")).isTrue();
+        assertThat(pageMetadata.has("totalElements")).isTrue();
+        assertThat(pageMetadata.has("totalPages")).isTrue();
+        assertThat(paths.path("/api/v1/accounts").path("post").path("responses").path("400")
+                .path("description").asText()).contains("errors");
 
         var parameters = paths.path("/api/v1/transfers").path("post").path("parameters");
         JsonNode idempotencyKey = StreamSupport.stream(parameters.spliterator(), false)
