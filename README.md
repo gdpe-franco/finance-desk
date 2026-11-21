@@ -4,35 +4,36 @@ A small backend-only transaction processing project built with Java 21, Spring B
 
 ## Run locally
 
-Prerequisites: Java 21 and Docker Compose. Maven is provided by the project wrapper.
+From the repository root, one command builds the app image and starts the API and MySQL. Docker supplies Java and Maven; neither needs to be installed on the host.
 
 ```sh
-docker compose up -d --wait
-./mvnw spring-boot:run
+docker compose up -d --build --wait
 ```
 
-The API runs at `http://localhost:8080`; health is available at `http://localhost:8080/actuator/health`.
-OpenAPI JSON is available at `http://localhost:8080/v3/api-docs`, and Swagger UI at `http://localhost:8080/swagger-ui/index.html`.
+API: <http://localhost:8080>
+- Health: <http://localhost:8080/actuator/health>
+- Swagger UI: <http://localhost:8080/swagger-ui/index.html>
+- OpenAPI JSON: <http://localhost:8080/v3/api-docs>
 
-For funded demo accounts, run the service with the explicit `local-demo` profile:
+Flyway applies database migrations at startup. View app logs with `docker compose logs -f app`.
+
+To start with funded demo accounts (only seeds an empty database):
 
 ```sh
-SPRING_PROFILES_ACTIVE=local-demo ./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=local-demo docker compose up -d --build --force-recreate app
 ```
 
-The fixture seeds two MXN accounts only when the database has no accounts and logs their IDs. Their opening balances are demo-only and are not recorded in the transfer ledger.
+The fixture logs the account IDs. Opening balances are demo-only and are not ledger entries.
 
-For an uncertain transfer response or a `500` processing error, retry the same request with the same `Idempotency-Key`. A stored `422` business rejection is replayed; use a new key if the request details change.
-
-Local database credentials have development-only defaults in `compose.yaml`. To override them, copy `.env.example` to `.env`. To stop MySQL while preserving its data, run `docker compose down`; to delete the local database volume as well, run `docker compose down -v`.
-
-Run the test suite with:
+Run all tests, including the Testcontainers concurrency tests:
 
 ```sh
-./mvnw -B verify
+docker compose --profile test run --rm test
 ```
 
-HTTP/persistence tests use the MySQL service above. The concurrency suite starts an isolated MySQL container with Testcontainers, so `./mvnw -B verify` also requires Docker.
+Stop the app and database while preserving data with `docker compose down`. Delete the local database volume as well with `docker compose down -v`. You can override local-only database defaults by copying `.env.example` to `.env`.
+
+For an uncertain transfer response or a `500` processing error, retry the same request with the same `Idempotency-Key`. A stored `422` business rejection is replayed; use a new key if transfer details change.
 
 ## Project structure
 

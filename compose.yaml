@@ -16,5 +16,44 @@ services:
       timeout: 5s
       retries: 20
 
+  app:
+    build: .
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-transactions_app}
+      DB_PASSWORD: ${DB_PASSWORD:-transactions_local}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  test:
+    image: maven:3.9.11-eclipse-temurin-21
+    profiles: ["test"]
+    working_dir: /workspace
+    command: ["./mvnw", "-B", "-ntp", "verify"]
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-transactions_app}
+      DB_PASSWORD: ${DB_PASSWORD:-transactions_local}
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    volumes:
+      - .:/workspace
+      - ${HOME}/.m2:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
 volumes:
   mysql-data:
