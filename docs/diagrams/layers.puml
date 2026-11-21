@@ -1,0 +1,17 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+
+rectangle "Web\nHTTP controllers" as Web
+rectangle "Application\nUse cases and persistence ports" as Application
+rectangle "Domain\nAccount, transfer, and ledger rules" as Domain
+rectangle "Infrastructure\nJPA persistence adapters" as Persistence
+database "MySQL" as MySQL
+
+Web --> Application : calls
+Application --> Domain : applies rules
+Persistence ..> Application : implements ports
+Persistence --> MySQL : reads and writes
+@enduml

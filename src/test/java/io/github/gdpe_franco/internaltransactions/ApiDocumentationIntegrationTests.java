@@ -30,7 +30,7 @@ class ApiDocumentationIntegrationTests {
                 .andReturn().getResponse().getContentAsString());
 
         assertThat(openApi.path("info").path("title").asText())
-                .isEqualTo("Internal Transactions System API");
+                .isEqualTo("Finance Desk API");
         var paths = openApi.path("paths");
         assertThat(paths.has("/api/v1/accounts")).isTrue();
         assertThat(paths.has("/api/v1/accounts/{id}/ledger")).isTrue();

@@ -1,8 +1,10 @@
+name: finance-desk
+
 services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_DATABASE: internal_transactions_system
+      MYSQL_DATABASE: finance_desk
       MYSQL_USER: ${DB_USERNAME:-transactions_app}
       MYSQL_PASSWORD: ${DB_PASSWORD:-transactions_local}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-localroot}
@@ -19,7 +21,7 @@ services:
   app:
     build: .
     environment:
-      DB_URL: jdbc:mysql://mysql:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_URL: jdbc:mysql://mysql:3306/finance_desk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       DB_USERNAME: ${DB_USERNAME:-transactions_app}
       DB_PASSWORD: ${DB_PASSWORD:-transactions_local}
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
@@ -41,9 +43,9 @@ services:
     working_dir: /workspace
     command: ["./mvnw", "-B", "-ntp", "verify"]
     environment:
-      DB_URL: jdbc:mysql://mysql:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      DB_USERNAME: ${DB_USERNAME:-transactions_app}
-      DB_PASSWORD: ${DB_PASSWORD:-transactions_local}
+      DB_URL: jdbc:mysql://test-mysql:3306/finance_desk_test?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: finance_desk_test
+      DB_PASSWORD: finance_desk_test
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
     volumes:
       - .:/workspace
@@ -52,8 +54,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      mysql:
+      test-mysql:
         condition: service_healthy
+
+  test-mysql:
+    image: mysql:8.4
+    profiles: ["test"]
+    environment:
+      MYSQL_DATABASE: finance_desk_test
+      MYSQL_USER: finance_desk_test
+      MYSQL_PASSWORD: finance_desk_test
+      MYSQL_ROOT_PASSWORD: testroot
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   mysql-data:

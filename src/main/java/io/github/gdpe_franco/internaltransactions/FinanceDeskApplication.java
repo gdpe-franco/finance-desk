@@ -7,12 +7,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
 @OpenAPIDefinition(info = @Info(
-        title = "Internal Transactions System API",
+        title = "Finance Desk API",
         version = "v1",
         description = "Backend API for internal accounts, transfers, and ledger entries."))
-public class InternalTransactionsSystemApplication {
+public class FinanceDeskApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(InternalTransactionsSystemApplication.class, args);
+        SpringApplication.run(FinanceDeskApplication.class, args);
     }
 }

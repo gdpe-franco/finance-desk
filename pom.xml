@@ -11,10 +11,10 @@
     </parent>
 
     <groupId>io.github.gdpe_franco</groupId>
-    <artifactId>internal-transactions-system</artifactId>
+    <artifactId>finance-desk</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>Internal Transactions System</name>
-    <description>Internal account transfer processing backend</description>
+    <name>Finance Desk</name>
+    <description>Backend for account management, internal transfers, and ledgers</description>
 
     <properties>
         <java.version>21</java.version>

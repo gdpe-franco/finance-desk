@@ -1,0 +1,49 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+
+start
+:Submit transfer request;
+if (Body and UUID key valid?) then (yes)
+else (no)
+  :400 — no transfer attempt;
+  stop
+endif
+
+partition "1. Registration transaction" {
+  :Try to insert a PENDING transfer;
+}
+if (Insert failed?) then (yes)
+  if (Existing transfer found for key?) then (yes)
+    if (Request details differ?) then (yes)
+      :409 — key conflict;
+      stop
+    endif
+  else (no)
+    :500 — retry with the same key;
+    stop
+  endif
+endif
+
+partition "2. Processing transaction" {
+  :Lock transfer row;
+  if (Already completed or failed?) then (yes)
+    :Replay stored result\n200 if completed, 422 if failed;
+    stop
+  endif
+  :Lock account rows in ascending ID order;
+  if (Business rules pass?) then (yes)
+    :Update both balances, write DEBIT and CREDIT,\nand mark COMPLETED in one commit;
+  else (no)
+    :Mark FAILED without balance or ledger changes;
+  endif
+  note right
+    If processing throws, roll back and leave
+    the attempt PENDING. Return 500 or 503;
+    retry the same request with the same key.
+  end note
+}
+
+:201 for newly registered success,\n200 for retried success, 422 for business rejection;
+stop
+@enduml

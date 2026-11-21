@@ -5,6 +5,6 @@ RUN ./mvnw -B -ntp -Dmaven.test.skip=true package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /workspace/target/internal-transactions-system-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/target/finance-desk-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

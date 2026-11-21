@@ -1,0 +1,49 @@
+@startuml
+!pragma layout smetana
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+
+entity accounts {
+  id : BIGINT <<PK>>
+  --
+  account_number : VARCHAR(18) <<UK>>
+  owner_name : VARCHAR(120)
+  currency : VARCHAR(3)
+  balance : DECIMAL(19,2)
+  status : VARCHAR(16)
+  version : BIGINT
+  created_at : DATETIME(6)
+  updated_at : DATETIME(6)
+}
+
+entity transfers {
+  id : BIGINT <<PK>>
+  --
+  reference : CHAR(36) <<UK>>
+  idempotency_key : CHAR(36) <<UK>>
+  source_account_id : BIGINT
+  destination_account_id : BIGINT
+  amount : DECIMAL(19,2)
+  currency : VARCHAR(3)
+  status : VARCHAR(16)
+  failure_code : VARCHAR(48)
+  created_at : DATETIME(6)
+  completed_at : DATETIME(6)
+}
+
+entity ledger_entries {
+  id : BIGINT <<PK>>
+  --
+  transfer_id : BIGINT <<FK>>
+  account_id : BIGINT <<FK>>
+  type : VARCHAR(8)
+  amount : DECIMAL(19,2)
+  created_at : DATETIME(6)
+  --
+  UNIQUE (transfer_id, type)
+}
+
+accounts ||--o{ ledger_entries : account_id
+transfers ||--o{ ledger_entries : transfer_id
+@enduml

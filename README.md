@@ -1,6 +1,6 @@
-# Internal Transactions System
+# Finance Desk
 
-A small backend-only transaction processing project built with Java 21, Spring Boot 3, and MySQL 8.
+Finance Desk is a backend for account management, internal transfers, and account ledgers, built with Java 21, Spring Boot 3, and MySQL 8.
 
 ## Run locally
 
@@ -12,6 +12,7 @@ docker compose up -d --build --wait
 
 API: <http://localhost:8080>
 This MVP has no authentication. Compose binds the API and MySQL ports to localhost only; the `Idempotency-Key` header is not an access credential.
+- MySQL for local tools: `127.0.0.1:3306`, database `finance_desk`; use `.env` credentials or the defaults in `.env.example`.
 - Health: <http://localhost:8080/actuator/health>
 - Swagger UI: <http://localhost:8080/swagger-ui/index.html>
 - OpenAPI JSON: <http://localhost:8080/v3/api-docs>
@@ -31,6 +32,8 @@ Run all tests, including the Testcontainers concurrency tests:
 ```sh
 docker compose --profile test run --rm test
 ```
+
+Tests use a separate temporary MySQL service, not the local Finance Desk database. Stop all services, including the test database, with `docker compose --profile test down`.
 
 Stop the app and database while preserving data with `docker compose down`. Delete the local database volume as well with `docker compose down -v`. You can override local-only database defaults by copying `.env.example` to `.env`.
 
@@ -72,12 +75,8 @@ Ledger responses contain an `entries` array and `page` metadata: the zero-based 
 
 ## Architecture at a glance
 
-```mermaid
-flowchart LR
-    Web[HTTP controllers] --> Application[Application services]
-    Application --> Domain[Domain rules]
-    Persistence[Persistence adapters] --> Application
-    Persistence --> MySQL[(MySQL)]
-```
+![Application layers: HTTP controllers call application services, which use domain rules. JPA adapters implement application ports and access MySQL.](docs/diagrams/layers.png)
 
 Transfers write both balances, the transfer outcome, and both ledger entries in one MySQL transaction. `Idempotency-Key` retries replay the existing result; a key reused with different request details conflicts. Pessimistic account locks are acquired in ascending ID order. See [ARCHITECTURE.md](ARCHITECTURE.md) for the accepted failure and recovery behavior.
+
+See the [database schema](ARCHITECTURE.md#data-model) and [transfer workflow](ARCHITECTURE.md#transfer-workflow) for more detail.

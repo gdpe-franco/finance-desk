@@ -11,14 +11,14 @@ jobs:
       mysql:
         image: mysql:8.4
         env:
-          MYSQL_DATABASE: internal_transactions_system
+          MYSQL_DATABASE: finance_desk_test
           MYSQL_USER: transactions_app
           MYSQL_PASSWORD: transactions_local
           MYSQL_ROOT_PASSWORD: localroot
         ports:
           - 3306:3306
         options: >-
-          --health-cmd='mysqladmin ping -h 127.0.0.1 -u root -p"$MYSQL_ROOT_PASSWORD" --silent'
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -p$MYSQL_ROOT_PASSWORD --silent"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -32,6 +32,6 @@ jobs:
       - name: Verify
         run: ./mvnw -B verify
         env:
-          DB_URL: jdbc:mysql://127.0.0.1:3306/internal_transactions_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+          DB_URL: jdbc:mysql://127.0.0.1:3306/finance_desk_test?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
           DB_USERNAME: transactions_app
           DB_PASSWORD: transactions_local

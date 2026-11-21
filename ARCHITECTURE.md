@@ -1,16 +1,12 @@
-# Internal Transactions System architecture
+# Finance Desk architecture
 
 ## Scope
 
-Internal Transactions System is a single Spring Boot application for internal account transfers. The MVP uses Java 21, Spring Boot 3, MySQL 8, and a REST API. It does not include a frontend, external payment rails, authentication, messaging, or distributed services.
+Finance Desk is a single Spring Boot application for account management and internal transfers. The MVP uses Java 21, Spring Boot 3, MySQL 8, and a REST API. It does not include a frontend, external payment rails, authentication, messaging, or distributed services.
 
 ## Layers
 
-```text
-web → application → domain
-          ↑
-infrastructure (implements application persistence ports)
-```
+![Application layers: web calls application, application uses domain, and infrastructure implements application ports.](docs/diagrams/layers.png)
 
 - `domain` owns account, transfer, and ledger rules and types; it has no Spring or HTTP dependencies.
 - `application` coordinates use cases and defines persistence ports where they isolate persistence behavior.
@@ -18,6 +14,12 @@ infrastructure (implements application persistence ports)
 - `web` maps HTTP requests/responses and validation to application use cases.
 
 Keep this as one deployable application. Add abstractions only where they separate business behavior from infrastructure or provide a concrete persistence capability such as locking.
+
+## Data model
+
+![Database schema: each ledger entry references one account and one transfer.](docs/diagrams/database-schema.png)
+
+The foreign keys shown are enforced by MySQL. `source_account_id` and `destination_account_id` on `transfers` are not foreign keys, so rejected attempts involving unknown accounts can still be recorded. `(transfer_id, type)` is unique, allowing at most one DEBIT and one CREDIT entry per transfer.
 
 ## Money and accounts
 
@@ -38,6 +40,12 @@ Keep this as one deployable application. Add abstractions only where they separa
 - Concurrent account updates use pessimistic row locks acquired in a deterministic order. The database remains the final authority for unique constraints and nonnegative balances.
 - Ledger entries are append-only in application behavior; database uniqueness on `(transfer_id, type)` prevents duplicate debit/credit entries.
 
+### Transfer workflow
+
+![Transfer workflow from request validation through registration, idempotency checks, and processing.](docs/diagrams/transfer-workflow.png)
+
+[PlantUML sources and rendering instructions](docs/diagrams/README.md).
+
 ## API behavior
 
 - Successful account creation returns `201 Created`; missing resources return `404`.
@@ -50,4 +58,4 @@ Keep this as one deployable application. Add abstractions only where they separa
 
 ## Decisions deferred
 
-OpenAPI is added during release-readiness work. Authentication, deposits, outbox/event publishing, Kafka, Redis, scheduled recovery, and production-grade operational telemetry are outside the MVP.
+Login and role-based access, deposits, outbox/event publishing, Kafka, Redis, scheduled recovery, and production-grade operational telemetry are outside the MVP.
